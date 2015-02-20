@@ -99,4 +99,4 @@ cm$table
 cm$overall
 ```
 
-The model has achieved a very high accuracy for the classification.
+The out-of-sample error is in the first column of the last output. The model has achieved a very high accuracy for the classification.
