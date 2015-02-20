@@ -1,0 +1,102 @@
+---
+title: "Human Activity Recognition"
+output: html_document
+---
+
+The objective is to build a machine learning model to recognize the activity, specifically, correct and incorrect ways of lifting the dumbbell, from accelerometer data.
+
+### Data Import and Clean Up
+
+First we will read in the "training" and "testing" datasets.
+
+```{r}
+raw <- read.csv("../pml-training.csv")
+test_submit <- read.csv("../pml-testing.csv")
+```
+
+The columns with names, time stamps are removed from both datasets, as well as columns that are mostly empty or NAs.
+
+```{r}
+raw <- raw[, -(1:7)]
+test_submit <- test_submit[, -(1:7)]
+raw[raw == "" | raw == "#DIV/0!"] <- NA                 
+    # Make all meanless entries into NAs
+removeCol <- which(array(colSums(is.na(raw)) > 19000))  
+    # The columns to remove are the ones that have more than 19000 NA's in the training set
+raw <- raw[, -removeCol]
+test_submit <- test_submit[, -removeCol]
+```
+
+By doing this there is actually no NA's left in the datasets
+
+```{r}
+any(is.na(raw))
+any(is.na(test_submit))
+```
+
+### Training, Cross-validation, and Test sets
+
+The "training" data will be split into training, cross-validation, and test sets randomly with a ratio of 70%:20%:10%.
+
+```{r}
+library(caret)
+set.seed(126)
+trainIndex <- createDataPartition(raw$classe, p = 0.7, list = FALSE)
+train <- raw[trainIndex, ]
+cvAndTest <- raw[-trainIndex, ]
+
+cvIndex <- createDataPartition(cvAndTest$classe, p = 2/3, list = FALSE)
+cv <- cvAndTest[cvIndex, ]
+test <- cvAndTest[-cvIndex, ]
+```
+
+The `train` dataset will be used to train the models. The `cv` dataset for picking models and tuning parameters. The `test` dataset will be used once to estimate out-of-sample error of the best model.
+
+### Neural Network
+
+The neural network method from the `nnet` package is applied to the training data with one intermediate layer with 15 nodes.
+
+```{r, results='hide'}
+library(nnet)
+nnetFit <- nnet(classe ~., data = train, size = 15, maxit = 1000)
+```
+
+Apply the model fit on the `cv` data, for the confusion matrix and accuracy
+
+```{r}
+nnetResults <- predict(nnetFit, cv[, -53], type = "class")
+cm <- confusionMatrix(nnetResults, cv$classe)
+cm$table
+cm$overall
+```
+
+### Random Forest
+
+The random forest method from the `randomForest` package is applied to the training data.
+
+```{r, results='hide'}
+library(randomForest)
+rfFit <- randomForest(classe ~ ., data = train)
+```
+
+Apply the model fit on the `cv` data, for the confusion matrix and accuracy
+
+```{r}
+rfResults <- predict(rfFit, cv[, -53])
+cm <- confusionMatrix(rfResults, cv$classe)
+cm$table
+cm$overall
+```
+
+### Error Estimation
+
+The random forest method is clearly giving the better results here. We will pick this as our final model. The out-of-sample error is estimated when applying it on the set-aside test data set.
+
+```{r}
+rfTestResults <- predict(rfFit, test[, -53])
+cm <- confusionMatrix(rfTestResults, test$classe)
+cm$table
+cm$overall
+```
+
+The out-of-sample error is in the first column of the last output. The model has achieved a very high accuracy for the classification.
